@@ -1,0 +1,36 @@
+import streamlit as st
+import pandas as pd
+
+st.title("일별 처리 현황 대시보드")
+
+# 엑셀 파일 업로드
+uploaded_file = st.file_uploader("엑셀 파일 업로드", type=["xlsx"])
+
+if uploaded_file:
+    df_raw = pd.read_excel(uploaded_file, skiprows=2)
+    df_raw.columns = df_raw.columns.str.strip()
+    
+    # 날짜 처리
+    df_raw = df_raw.dropna(subset=["신청일자", "진행상태"])
+    df_raw["신청일자"] = pd.to_datetime(df_raw["신청일자"], errors="coerce")
+    df_raw["일자"] = df_raw["신청일자"].dt.date
+    
+    df_raw["넥쏘여부"] = df_raw["차종"].apply(lambda x: "넥쏘" if "넥쏘" in str(x) else "기타")
+    
+    def classify(row):
+        if row["유무상구분"] == "유상":
+            return "유상"
+        elif row["유무상구분"] in ["무상", "정책"]:
+            return f"무상-{row['넥쏘여부']}"
+        return "기타"
+    
+    df_raw["처리유형"] = df_raw.apply(classify, axis=1)
+
+    summary = df_raw.groupby(["일자", "진행상태", "처리유형"]).size().reset_index(name="건수")
+    pivot_df = summary.pivot_table(index="일자", columns=["진행상태", "처리유형"], values="건수", fill_value=0)
+
+    st.dataframe(pivot_df)
+
+    # 새로고침 버튼
+    if st.button("새로고침"):
+        st.experimental_rerun()
